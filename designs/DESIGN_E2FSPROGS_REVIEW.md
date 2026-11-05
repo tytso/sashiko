@@ -399,13 +399,13 @@ Modeled on `deployment/sashiko.dev/` with GitHub Forge wiring from
     - `SASHIKO__LINUX_BUG__ENABLED=true`
     - `SASHIKO__LINUX_BUG__FIX_CHECK_ENABLED=true`
     - `SASHIKO__SERVER__ACL__ADMINS=tytso@mit.edu,roman.gushchin@linux.dev`
-    - Secret-backed `SASHIKO__FORGE__GITHUB_TOKEN`,
-      `SASHIKO__FORGE__WEBHOOK_SECRET`, `SASHIKO__SMTP__PASSWORD`, and
-      `SASHIKO__SERVER__SESSION_SECRET` (`sashiko-e2fsprogs-secrets`).
-  - `data-manager` pod (`sashiko-e2fsprogs-ksa`) and `sashiko-db-backup`
-    nightly CronJob backing up SQLite to GCS.
+    - Secret-backed `LLM_API_KEY`, `SASHIKO__FORGE__API_TOKEN` (or GitHub App
+      credentials), `SASHIKO__FORGE__WEBHOOK_SECRET`, `SASHIKO__SMTP__PASSWORD`,
+      and `SASHIKO__SERVER__JWT_SECRET` (`sashiko-e2fsprogs-secrets`).
+  - `data-manager` pod (`sashiko-e2fsprogs-ksa`) and
+    `sashiko-e2fsprogs-nightly-backup` CronJob backing up SQLite to GCS.
 - **Routing (`base/routing/`), `maintenance/`, and `production/`:**
-  - `sashiko-e2fsprogs-service`, `sashiko-e2fsprogs-backendconfig`,
+  - `sashiko-e2fsprogs-service`, `sashiko-e2fsprogs-backend-config`,
     `sashiko-e2fsprogs-cert` (`e2fsprogs.sashiko.dev`), dual-stack GCE Ingress
-    (`sashiko-e2fsprogs-ip` / `sashiko-e2fsprogs-ipv6`), `maintenance` 503
-    overlay, and `production/kustomization.yaml.example`.
+    (`lb-ipv4-e2fsprogs` / `lb-ipv6-e2fsprogs`), `maintenance` overlay, and
+    `production/kustomization.yaml.example`.

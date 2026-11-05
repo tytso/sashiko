@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: sashiko-e2fsprogs-cert
+  namespace: sashiko-e2fsprogs
+spec:
+  domains:
+    - e2fsprogs.sashiko.dev

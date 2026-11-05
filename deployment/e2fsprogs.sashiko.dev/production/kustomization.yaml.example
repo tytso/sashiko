@@ -1,0 +1,84 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# ENVIRONMENT-SPECIFIC CONFIGURATION EXAMPLE
+# Copy this to 'kustomization.yaml' and modify IDs.
+# This file is ignored by git.
+#
+# The base manifest expects a 'sashiko-e2fsprogs-secrets' Secret in the
+# sashiko-e2fsprogs namespace holding LLM_API_KEY, SASHIKO__SMTP__PASSWORD,
+# SASHIKO__SERVER__JWT_SECRET, and SASHIKO__FORGE__WEBHOOK_SECRET; a container
+# referencing a missing key never starts. SASHIKO__FORGE__API_TOKEN (or GitHub
+# App keys SASHIKO__FORGE__APP_ID, SASHIKO__FORGE__INSTALLATION_ID, and
+# SASHIKO__FORGE__APP_PRIVATE_KEY) is optional for GitHub PR review posting and
+# API rate limits. Generate the JWT secret once and keep it:
+#
+#   SECRET=$(openssl rand -hex 32)
+#   kubectl -n sashiko-e2fsprogs patch secret sashiko-e2fsprogs-secrets \
+#     --type=merge \
+#     -p "{\"stringData\":{\"SASHIKO__SERVER__JWT_SECRET\":\"$SECRET\"}}"
+
+patches:
+  # 1. Deployment: Update image
+  - target:
+      kind: Deployment
+      name: sashiko-e2fsprogs-deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: >-
+          us-docker.pkg.dev/gcp-project-xxxxx/sashiko-repository/sashiko:next
+
+  # 2. ServiceAccount: Link to real GCP Service Account
+  - target:
+      kind: ServiceAccount
+      name: sashiko-e2fsprogs-ksa
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: a-service-account@gcp-project-xxxxx.iam.gserviceaccount.com
+
+  # 3. Data Manager: Inject Bucket ID
+  - target:
+      kind: Deployment
+      name: data-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: BACKUP_BUCKET
+            value: gs://bucket-xxxxx/sashiko-e2fsprogs
+
+  # 4. CronJob: Inject Bucket ID
+  - target:
+      kind: CronJob
+      name: sashiko-e2fsprogs-nightly-backup
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env
+        value:
+          - name: BACKUP_BUCKET
+            value: gs://bucket-xxxxx/sashiko-e2fsprogs
+
+  # 5. Ingress: Real IPv4/IPv6 static address and certificate names
+  - target:
+      kind: Ingress
+      name: sashiko-e2fsprogs-ingress
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/kubernetes.io~1ingress.global-static-ip-name
+        value: "lb-ipv4-e2fsprogs"
+      - op: replace
+        path: /metadata/annotations/networking.gke.io~1managed-certificates
+        value: "sashiko-e2fsprogs-cert"
+
+  - target:
+      kind: Ingress
+      name: sashiko-e2fsprogs-ingress-ipv6
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/kubernetes.io~1ingress.global-static-ip-name
+        value: "lb-ipv6-e2fsprogs"
+      - op: replace
+        path: /metadata/annotations/networking.gke.io~1managed-certificates
+        value: "sashiko-e2fsprogs-cert"

@@ -1,0 +1,235 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sashiko-e2fsprogs
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sashiko-e2fsprogs-ksa
+  namespace: sashiko-e2fsprogs
+  annotations:
+    iam.gke.io/gcp-service-account: >-
+      sashiko-app@GCP_PROJECT_ID.iam.gserviceaccount.com
+---
+# Holds the SQLite database and a clone of the e2fsprogs git repository.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sashiko-e2fsprogs-data-pvc
+  namespace: sashiko-e2fsprogs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sashiko-e2fsprogs-deployment
+  namespace: sashiko-e2fsprogs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sashiko-e2fsprogs
+  template:
+    metadata:
+      labels:
+        app: sashiko-e2fsprogs
+    spec:
+      # Scheduled on pool-256gb so the main Linux instance on n2d-pool keeps
+      # dedicated node resources.
+      nodeSelector:
+        cloud.google.com/gke-nodepool: pool-256gb
+      securityContext:
+        fsGroup: 1000
+      serviceAccountName: sashiko-e2fsprogs-ksa
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: sashiko
+          image: >-
+            us-docker.pkg.dev/GCP_PROJECT_ID/sashiko-repository/sashiko:next
+          # The image entrypoint provisions the e2fsprogs repository named by
+          # SASHIKO__PROJECT__KIND and then execs the daemon.
+          command: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+          args: ["--debug", "--track"]
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              cpu: "16"
+              memory: "32Gi"
+          ports:
+            - containerPort: 8080
+          # Startup allows ten minutes on first boot while the entrypoint
+          # clones e2fsprogs and the daemon runs schema migrations.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          env:
+            - name: SASHIKO_LOG_PLAIN
+              value: "true"
+            - name: NO_COLOR
+              value: "true"
+            - name: SASHIKO__PROJECT__KIND
+              value: "e2fsprogs"
+            - name: SASHIKO__PROJECT__NAME
+              value: "Sashiko"
+            - name: SASHIKO__PROJECT__DESCRIPTION
+              value: "Sashiko reviewing e2fsprogs"
+            - name: SASHIKO__PROJECT__DOMAIN
+              value: "e2fsprogs.sashiko.dev"
+            - name: SASHIKO__DATABASE__URL
+              value: "/data/db/sashiko-e2fsprogs.db"
+            - name: SASHIKO__GIT__REPOSITORY_PATH
+              value: "/app/third_party/e2fsprogs"
+            - name: SASHIKO__REVIEW__WORKTREE_DIR
+              value: "/mnt/worktrees"
+            - name: SASHIKO__REVIEW__CONCURRENCY
+              value: "8"
+            - name: SASHIKO__REVIEW__EFFORT
+              value: "high"
+            - name: SASHIKO__REVIEW__EMAIL_POLICY_PATH
+              value: "/app/projects/e2fsprogs/mailing_lists.toml"
+            - name: SASHIKO__SERVER__PORT
+              value: "8080"
+            - name: SASHIKO__SERVER__PUBLIC_BASE_URL
+              value: "https://e2fsprogs.sashiko.dev"
+            - name: SASHIKO__SERVER__ACL__ADMINS
+              value: "tytso@mit.edu,roman.gushchin@linux.dev"
+            - name: SASHIKO__SERVER__ACL__SECURITY
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__SERVER__ACL__SECURITY
+                  optional: true
+            - name: SASHIKO__AI__MODEL
+              value: "gemini-4-argon"
+            - name: SASHIKO__AI__MAX_INTERACTIONS
+              value: "100"
+            # Dual ingestion: track linux-ext4@vger.kernel.org via Lore NNTP
+            # alongside GitHub pull requests on tytso/e2fsprogs.
+            - name: SASHIKO__NNTP__SERVER
+              value: "nntp.lore.kernel.org"
+            - name: SASHIKO__NNTP__PORT
+              value: "119"
+            - name: SASHIKO__FORGE__ENABLED
+              value: "true"
+            - name: SASHIKO__FORGE__DISABLE_NNTP
+              value: "false"
+            - name: SASHIKO__FORGE__PROVIDER
+              value: "github"
+            - name: SASHIKO__FORGE__POST_MODE
+              value: "live"
+            - name: SASHIKO__FORGE__REPOS
+              value: "tytso/e2fsprogs"
+            - name: SASHIKO__LINUX_BUG__ENABLED
+              value: "true"
+            - name: SASHIKO__LINUX_BUG__FIX_CHECK_ENABLED
+              value: "true"
+            - name: SASHIKO__SMTP__SENDER_ADDRESS
+              value: "sashiko-bot@kernel.org"
+            - name: SASHIKO__SMTP__SERVER
+              value: "mail.kernel.org"
+            - name: SASHIKO__SMTP__PORT
+              value: "465"
+            - name: SASHIKO__SMTP__USERNAME
+              value: "sashiko-bot@kernel.org"
+            - name: SASHIKO__SMTP__REPLY_TO
+              value: "sashiko-reviews@lists.linux.dev"
+            - name: SASHIKO__SMTP__DRY_RUN
+              value: "false"
+            - name: GIT_CONFIG_COUNT
+              value: "1"
+            - name: GIT_CONFIG_KEY_0
+              value: "grep.threads"
+            - name: GIT_CONFIG_VALUE_0
+              value: "1"
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: LLM_API_KEY
+            - name: SASHIKO__SMTP__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__SMTP__PASSWORD
+            - name: SASHIKO__SERVER__JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__SERVER__JWT_SECRET
+            - name: SASHIKO__FORGE__WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__FORGE__WEBHOOK_SECRET
+            - name: SASHIKO__FORGE__API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__FORGE__API_TOKEN
+                  optional: true
+            - name: SASHIKO__FORGE__APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__FORGE__APP_ID
+                  optional: true
+            - name: SASHIKO__FORGE__INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__FORGE__INSTALLATION_ID
+                  optional: true
+            - name: SASHIKO__FORGE__APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sashiko-e2fsprogs-secrets
+                  key: SASHIKO__FORGE__APP_PRIVATE_KEY
+                  optional: true
+          volumeMounts:
+            - name: sashiko-e2fsprogs-storage
+              mountPath: /data
+              subPath: data-dir
+            - name: sashiko-e2fsprogs-storage
+              mountPath: /app/third_party/e2fsprogs
+              subPath: e2fsprogs-repo
+            - name: worktrees
+              mountPath: /mnt/worktrees
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: sashiko-e2fsprogs-storage
+          persistentVolumeClaim:
+            claimName: sashiko-e2fsprogs-data-pvc
+        - name: worktrees
+          emptyDir: {}
+        - name: tmp-volume
+          emptyDir: {}

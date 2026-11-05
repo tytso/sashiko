@@ -1,0 +1,53 @@
+# Stable IPv4 Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sashiko-e2fsprogs-ingress
+  namespace: sashiko-e2fsprogs
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "lb-ipv4-e2fsprogs"
+    networking.gke.io/managed-certificates: "sashiko-e2fsprogs-cert"
+spec:
+  defaultBackend:
+    service:
+      name: sashiko-e2fsprogs-service
+      port:
+        number: 8080
+  rules:
+    - host: e2fsprogs.sashiko.dev
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sashiko-e2fsprogs-service
+                port:
+                  number: 8080
+---
+# Stable IPv6 Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sashiko-e2fsprogs-ingress-ipv6
+  namespace: sashiko-e2fsprogs
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "lb-ipv6-e2fsprogs"
+    networking.gke.io/managed-certificates: "sashiko-e2fsprogs-cert"
+spec:
+  defaultBackend:
+    service:
+      name: sashiko-e2fsprogs-service
+      port:
+        number: 8080
+  rules:
+    - host: e2fsprogs.sashiko.dev
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sashiko-e2fsprogs-service
+                port:
+                  number: 8080
