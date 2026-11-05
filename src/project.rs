@@ -41,6 +41,7 @@ pub enum ProjectId {
     Sashiko,
     Gcc,
     Qemu,
+    E2fsprogs,
 }
 
 impl ProjectId {
@@ -52,6 +53,7 @@ impl ProjectId {
             ProjectId::Sashiko => "sashiko",
             ProjectId::Gcc => "gcc",
             ProjectId::Qemu => "qemu",
+            ProjectId::E2fsprogs => "e2fsprogs",
         }
     }
 
@@ -62,6 +64,7 @@ impl ProjectId {
             ProjectId::Sashiko => "Sashiko",
             ProjectId::Gcc => "GCC",
             ProjectId::Qemu => "QEMU",
+            ProjectId::E2fsprogs => "e2fsprogs",
         }
     }
 
@@ -80,6 +83,7 @@ impl ProjectId {
             ProjectId::Sashiko => "sashiko",
             ProjectId::Gcc => "gcc",
             ProjectId::Qemu => "qemu",
+            ProjectId::E2fsprogs => "e2fsprogs",
         }
     }
 
@@ -90,7 +94,7 @@ impl ProjectId {
     pub fn uses_maintainers(self) -> bool {
         match self {
             ProjectId::Linux => true,
-            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu => false,
+            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu | ProjectId::E2fsprogs => false,
         }
     }
 
@@ -105,7 +109,7 @@ impl ProjectId {
             ProjectId::Linux => {
                 crate::authority::TrustedBots(&["lkp@intel.com", "*@syzkaller.appspotmail.com"])
             }
-            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu => {
+            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu | ProjectId::E2fsprogs => {
                 crate::authority::TrustedBots(&[])
             }
         }
@@ -119,6 +123,7 @@ impl ProjectId {
             ProjectId::Sashiko => "projects/sashiko/mailing_lists.toml",
             ProjectId::Gcc => "projects/gcc/mailing_lists.toml",
             ProjectId::Qemu => "projects/qemu/mailing_lists.toml",
+            ProjectId::E2fsprogs => "projects/e2fsprogs/mailing_lists.toml",
         }
     }
 
@@ -128,7 +133,7 @@ impl ProjectId {
     pub fn upstream_maintainers_path(self) -> Option<&'static str> {
         match self {
             ProjectId::Linux => Some("projects/linux/upstream_maintainers.toml"),
-            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu => None,
+            ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu | ProjectId::E2fsprogs => None,
         }
     }
 
@@ -155,6 +160,10 @@ impl ProjectId {
             ProjectId::Qemu => Upstream {
                 url: "https://gitlab.com/qemu-project/qemu.git",
                 seed: Seed::None,
+            },
+            ProjectId::E2fsprogs => Upstream {
+                url: "https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git",
+                seed: Seed::Mirror("https://github.com/tytso/e2fsprogs.git"),
             },
         }
     }
@@ -201,6 +210,7 @@ impl FromStr for ProjectId {
             "sashiko" => Ok(ProjectId::Sashiko),
             "gcc" => Ok(ProjectId::Gcc),
             "qemu" => Ok(ProjectId::Qemu),
+            "e2fsprogs" => Ok(ProjectId::E2fsprogs),
             _ => Err(UnknownProject(s.to_string())),
         }
     }
@@ -239,6 +249,7 @@ impl ProjectId {
         ProjectId::Sashiko,
         ProjectId::Gcc,
         ProjectId::Qemu,
+        ProjectId::E2fsprogs,
     ];
 }
 
@@ -270,10 +281,14 @@ mod tests {
         // checked against a match the compiler forces to stay exhaustive.
         for project in ProjectId::ALL {
             match project {
-                ProjectId::Linux | ProjectId::Sashiko | ProjectId::Gcc | ProjectId::Qemu => {}
+                ProjectId::Linux
+                | ProjectId::Sashiko
+                | ProjectId::Gcc
+                | ProjectId::Qemu
+                | ProjectId::E2fsprogs => {}
             }
         }
-        assert_eq!(ProjectId::ALL.len(), 4);
+        assert_eq!(ProjectId::ALL.len(), 5);
     }
 
     #[test]
@@ -290,6 +305,7 @@ mod tests {
         assert_eq!(ProjectId::Sashiko.display_name(), "Sashiko");
         assert_eq!(ProjectId::Gcc.display_name(), "GCC");
         assert_eq!(ProjectId::Qemu.display_name(), "QEMU");
+        assert_eq!(ProjectId::E2fsprogs.display_name(), "e2fsprogs");
     }
 
     #[test]

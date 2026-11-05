@@ -283,6 +283,8 @@ pub fn target_project_for_bug(settings: &Settings, bugid: &str) -> ProjectId {
         ProjectId::Qemu
     } else if lower.starts_with("gcc-") {
         ProjectId::Gcc
+    } else if lower.starts_with("e2fsprogs-") {
+        ProjectId::E2fsprogs
     } else {
         settings.project.kind.unwrap_or_default()
     }

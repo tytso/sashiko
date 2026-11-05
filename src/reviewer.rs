@@ -3202,6 +3202,9 @@ impl Reviewer {
                                             crate::project::ProjectId::Qemu => {
                                                 "sashiko:qemu_patch_review"
                                             }
+                                            crate::project::ProjectId::E2fsprogs => {
+                                                "sashiko:e2fsprogs_patch_review"
+                                            }
                                         };
                                         let discovery_db = ctx.db.with_bug_actor(
                                             ctx.settings.project.attribution(),

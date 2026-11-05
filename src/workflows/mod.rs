@@ -15,6 +15,7 @@
 use crate::project::ProjectId;
 
 pub mod code_notes;
+pub mod e2fsprogs_patch_review;
 pub mod gcc_patch_review;
 pub mod guard;
 pub mod linux_bug;
@@ -37,6 +38,7 @@ pub fn stage_short_label(project: ProjectId, stage: &str) -> Option<&'static str
         ProjectId::Sashiko => sashiko_patch_review::stage_short_label(stage),
         ProjectId::Gcc => gcc_patch_review::stage_short_label(stage),
         ProjectId::Qemu => qemu_patch_review::stage_short_label(stage),
+        ProjectId::E2fsprogs => e2fsprogs_patch_review::stage_short_label(stage),
     }
 }
 
@@ -57,6 +59,10 @@ pub fn default_stage_count(project: ProjectId) -> usize {
         }
         ProjectId::Qemu => {
             qemu_patch_review::ANALYSIS_STAGES.len() + qemu_patch_review::CONSOLIDATION_STAGES.len()
+        }
+        ProjectId::E2fsprogs => {
+            e2fsprogs_patch_review::ANALYSIS_STAGES.len()
+                + e2fsprogs_patch_review::CONSOLIDATION_STAGES.len()
         }
     }
 }
@@ -139,6 +145,24 @@ pub fn planned_stages_from(project: ProjectId, stage_names: &[&'static str]) -> 
             if !planned.is_empty() {
                 planned.extend(
                     qemu_patch_review::CONSOLIDATION_STAGES
+                        .iter()
+                        .map(|s| s.name.to_string()),
+                );
+            }
+            planned
+        }
+        ProjectId::E2fsprogs => {
+            let mut planned: Vec<String> = stage_names
+                .iter()
+                .filter(|n| {
+                    e2fsprogs_patch_review::analysis_stage_by_name(n).is_some()
+                        || prior_feedback::is_prior_feedback_stage_name(n)
+                })
+                .map(|n| n.to_string())
+                .collect();
+            if !planned.is_empty() {
+                planned.extend(
+                    e2fsprogs_patch_review::CONSOLIDATION_STAGES
                         .iter()
                         .map(|s| s.name.to_string()),
                 );

@@ -198,6 +198,12 @@ impl LlmSession for VerifySession<'_> {
                 Use available tools (git_read_files, git_grep, git_blame, git_log, git_show, git_diff) to inspect the mainline codebase, verify call chains, and confirm whether this defect exists.\n\n\
                 CRITICAL VALIDATION FILTER: You must assess if the bug is genuine. Do not give the code the benefit of the doubt. To mark an issue as a false positive (is_false_positive=true), you must find concrete proof in the local codebase that the described conditions are impossible, unreachable, or already safely handled. If you cannot prove it is false, verify the code locations and provide your step-by-step reasoning in verification_reasoning."
             ),
+            ProjectId::E2fsprogs => format!(
+                "Establish this as an absolute fact: the current date is {current_date}. Your training data has a cutoff in the past, but you must base all relative time references strictly on this current date.\n\n\
+                You are an expert e2fsprogs and ext4 filesystem maintainer. Your task is to rigorously verify a candidate e2fsprogs defect or vulnerability against the top-of-trunk of the e2fsprogs master tree.\n\
+                Use available tools (git_read_files, git_grep, git_blame, git_log, git_show, git_diff) to inspect the mainline codebase, verify call chains, and confirm whether this defect exists.\n\n\
+                CRITICAL VALIDATION FILTER: You must assess if the bug is genuine. Do not give the code the benefit of the doubt. To mark an issue as a false positive (is_false_positive=true), you must find concrete proof in the local codebase that the described conditions are impossible, unreachable, or already safely handled across valid and crafted filesystem images. If you cannot prove it is false, verify the code locations and provide your step-by-step reasoning in verification_reasoning."
+            ),
         }
     }
 
@@ -331,6 +337,42 @@ Return ONLY a valid JSON object matching this schema:
                 locations = loc_str,
                 prefetch_block = prefetch_block,
             ),
+            ProjectId::E2fsprogs => format!(
+                "{stage_heading}
+
+Candidate Defect to Verify:
+Title: {title}
+Subsystem: {subsystem}
+{files_str}Description:
+{description}
+Locations:
+{locations}
+{prefetch_block}
+Task:
+1. Verify the problem against the mainline code shown above and top-of-trunk of the e2fsprogs master tree (commit `{master_sha}`). IMPORTANT: Use this exact `{master_sha}` SHA in any tool calls instead of `HEAD` or `master` to check the actual top-of-trunk.
+2. Scope your verification to the relevant library and utility files. Do not wander across unrelated utilities or files.
+3. Determine if the issue is a genuine, reachable defect in the codebase (including on crafted or corrupted filesystem images and 64-bit/bigalloc/metadata_csum volumes).
+4. If the defect is hallucinated, or a false positive that you can prove based on the code is impossible or safely handled, set \"is_false_positive\": true, provide concrete proof in \"refutation_evidence\", and summarize in \"verification_reasoning\".
+5. If it is a confirmed bug, set \"is_false_positive\": false, \"refutation_evidence\": null, provide your step-by-step proof in \"verification_reasoning\", carry forward and refine the verified code locations in \"relevant_code_locations\", and optionally suggest an \"impact_severity\" (\"Low\", \"Medium\", \"High\", \"Critical\", or \"Unknown\").
+
+EFFICIENCY LIMIT REQUIREMENT: Limit your investigation to the core defect. Do not trace unneeded macro definitions or unrelated history. You have a strict limit on tool calls; be extremely efficient instead of wandering the history.
+
+Return ONLY a valid JSON object matching this schema:
+{{
+  \"verification_reasoning\": \"1. Call chain... 2. Condition...\",
+  \"is_false_positive\": false,
+  \"refutation_evidence\": null,
+  \"impact_severity\": \"High\",
+  \"relevant_code_locations\": [ {{\"file\": \"lib/ext2fs/extents.c\", \"function_or_symbol\": \"function_name\", \"line\": 123}} ]
+}}",
+                stage_heading = BugStage::Verification.heading(),
+                master_sha = self.master_sha,
+                title = self.title,
+                subsystem = self.subsystem,
+                description = self.description,
+                locations = loc_str,
+                prefetch_block = prefetch_block,
+            ),
         }
     }
 
@@ -417,6 +459,15 @@ impl LlmSession for NormalizeSession<'_> {
                 Use available tools (git_read_files, git_log, git_grep) to inspect the codebase at `{master_sha}`. Specifically:\n\
                 - Use git_read_files with revision: \"{master_sha}\" or git_grep to inspect source code and identify affected files and symbols.\n\
                 - Use git_log with range: \"{master_sha}\" on affected files to observe the conventional subsystem commit prefix used by QEMU maintainers (e.g. 'virtio-net:', 'hw/arm:', 'target/riscv:', 'migration:', 'qapi:', 'block:').",
+                master_sha = self.master_sha
+            ),
+            ProjectId::E2fsprogs => format!(
+                "You are an expert e2fsprogs maintainer and technical editor. Your role is to normalize a candidate e2fsprogs defect into canonical form.\n\
+                You must standardize the defect's title, describe the technical substance, and identify the verified affected source files and symbols.\n\
+                The target codebase is the e2fsprogs repository at top-of-trunk commit `{master_sha}`.\n\
+                Use available tools (git_read_files, git_log, git_grep) to inspect the codebase at `{master_sha}`. Specifically:\n\
+                - Use git_read_files with revision: \"{master_sha}\" or git_grep to inspect source code and identify affected files and symbols.\n\
+                - Use git_log with range: \"{master_sha}\" on affected files to observe the conventional component commit prefix used in e2fsprogs (e.g. 'libext2fs:', 'e2fsck:', 'mke2fs:', 'tune2fs:', 'resize2fs:', 'debugfs:', 'fuse4fs:', 'dumpe2fs:', 'libe2p:', 'libss:').",
                 master_sha = self.master_sha
             ),
         }
@@ -574,6 +625,42 @@ Return ONLY a valid JSON object matching this schema:
                 hint = hint_section,
                 master_sha = self.master_sha
             ),
+            ProjectId::E2fsprogs => format!(
+                "{stage_heading}
+
+Candidate Bug Details:
+Original Problem: {problem}
+Reasoning: {reasoning}
+Reported Locations:
+{locations}
+{hint}
+Target Mainline Commit: {master_sha}
+
+Task:
+1. Determine the conventional e2fsprogs component commit prefix for this defect (e.g. 'libext2fs', 'e2fsck', 'mke2fs', 'tune2fs', 'resize2fs', 'debugfs', 'fuse4fs', 'dumpe2fs', 'libe2p', 'libss'). Use git_log on the affected file(s) at revision '{master_sha}' to observe the standard commit prefix used in e2fsprogs.
+2. Formulate a canonical title matching e2fsprogs patch conventions: '<component_prefix>: <defect or broken invariant in function_name()>' (strict limit of under 80 characters, NO backticks, NO markdown).
+   - CRITICAL: This is a bug report title describing an existing defect, NOT a patch or commit title. Do NOT use patch/fix action verbs like 'fix', 'resolve', 'prevent', 'avoid', or 'handle'. State the defect directly (e.g. 'libext2fs: out-of-bounds read on crafted xattr in ext2fs_xattrs_read()', NEVER 'libext2fs: fix out-of-bounds read in ext2fs_xattrs_read()').
+3. Provide a detailed, structured canonical description:
+   - Trigger / Preconditions: Specific filesystem features (e.g. 64bit, bigalloc, metadata_csum, inline_data), on-disk inputs, or host architecture conditions required to trigger the defect.
+   - Call Chain / Execution Path: Detail the complete chain of events/calls leading up to the problem.
+   - Failure Mechanism: Detail the exact root cause and how the metadata corruption, memory safety fault, or leak occurs.
+   - Impact: Consequence of the failure (e.g. silent filesystem metadata corruption, out-of-bounds read/write on crafted image, 32-bit block truncation, leaked handle/memory).
+4. Verify and list the affected source files and symbols in the mainline tree at commit '{master_sha}'.
+
+Return ONLY a valid JSON object matching this schema:
+{{
+  \"canonical_title\": \"libext2fs: out-of-bounds read on crafted xattr in ext2fs_xattrs_read()\",
+  \"canonical_description\": \"Trigger / Preconditions: ...\\nFailure Mechanism: ...\\nImpact: ...\",
+  \"affected_source_files\": [\"lib/ext2fs/ext_attr.c\"],
+  \"affected_symbols\": [\"ext2fs_xattrs_read\"]
+}}",
+                stage_heading = BugStage::Normalization.heading(),
+                problem = self.problem,
+                reasoning = self.reasoning,
+                locations = self.locations,
+                hint = hint_section,
+                master_sha = self.master_sha
+            ),
         }
     }
 
@@ -708,6 +795,15 @@ pub fn extract_directory_subsystems_for_project(
                     continue;
                 }
             }
+            ProjectId::E2fsprogs => {
+                if parts.first() == Some(&"lib") && parts.len() >= 2 && !parts[1].contains('.') {
+                    format!("lib/{}", parts[1])
+                } else if !parts.is_empty() {
+                    parts[0].to_string()
+                } else {
+                    continue;
+                }
+            }
         };
         if !subs.contains(&sub) {
             subs.push(sub);
@@ -719,6 +815,7 @@ pub fn extract_directory_subsystems_for_project(
             ProjectId::Sashiko => vec!["sashiko".to_string()],
             ProjectId::Gcc => vec!["gcc".to_string()],
             ProjectId::Qemu => vec!["qemu".to_string()],
+            ProjectId::E2fsprogs => vec!["e2fsprogs".to_string()],
         }
     } else {
         subs
@@ -1026,6 +1123,12 @@ impl LlmSession for DedupSession<'_> {
         IMPORTANT: Bugs that have the same root cause but different consequences should be considered a duplicate and be merged. Rule of thumb: if fixing one issue will resolve the other issue, it's the same bug.\n\
         Output raw JSON only."
                 .to_string(),
+            ProjectId::E2fsprogs => "You are an expert e2fsprogs and ext4 maintainer responsible for defect tracking and deduplication.\n\
+        You will compare a newly verified e2fsprogs bug against a list of known e2fsprogs bugs in the codebase.\n\
+        Determine if the newly verified bug is an identical duplicate (describing the same root cause in the same code path/function) of one of the candidate bugs.\n\
+        IMPORTANT: Bugs that have the same root cause but different consequences should be considered a duplicate and be merged. Rule of thumb: if fixing one issue will resolve the other issue, it's the same bug.\n\
+        Output raw JSON only."
+                .to_string(),
         }
     }
 
@@ -1078,6 +1181,7 @@ impl LlmSession for DedupSession<'_> {
             ProjectId::Sashiko => "Newly Verified Sashiko Bug:",
             ProjectId::Gcc => "Newly Verified GCC Bug:",
             ProjectId::Qemu => "Newly Verified QEMU Bug:",
+            ProjectId::E2fsprogs => "Newly Verified e2fsprogs Bug:",
         };
 
         format!(
@@ -1177,6 +1281,9 @@ impl LlmSession for TracingSession<'_> {
         Use available tools (git_blame, git_log, git_diff, git_show, git_read_files) to inspect history backwards and confirm which commit actually introduced the buggy logic rather than just refactoring lines.\n\
         EFFICIENCY LIMIT REQUIREMENT: You have a strict limit on tool calls; be extremely efficient instead of wandering the history.".to_string(),
             ProjectId::Qemu => "You are an expert QEMU maintainer. Your task is to determine the exact commit that introduced a verified QEMU defect.\n\
+        Use available tools (git_blame, git_log, git_diff, git_show, git_read_files) to inspect history backwards and confirm which commit actually introduced the buggy logic rather than just refactoring lines.\n\
+        EFFICIENCY LIMIT REQUIREMENT: You have a strict limit on tool calls; be extremely efficient instead of wandering the history.".to_string(),
+            ProjectId::E2fsprogs => "You are an expert e2fsprogs maintainer. Your task is to determine the exact commit that introduced a verified e2fsprogs defect.\n\
         Use available tools (git_blame, git_log, git_diff, git_show, git_read_files) to inspect history backwards and confirm which commit actually introduced the buggy logic rather than just refactoring lines.\n\
         EFFICIENCY LIMIT REQUIREMENT: You have a strict limit on tool calls; be extremely efficient instead of wandering the history.".to_string(),
         }
@@ -1309,6 +1416,7 @@ impl LlmSession for SeveritySession<'_> {
             ProjectId::Sashiko => "Sashiko",
             ProjectId::Gcc => "GCC",
             ProjectId::Qemu => "QEMU",
+            ProjectId::E2fsprogs => "e2fsprogs",
         };
         let threat_model_section = if self.project == ProjectId::Linux {
             let rendered = crate::threat_model::KernelThreatModel::render_for_severity(
@@ -1336,6 +1444,7 @@ impl LlmSession for SeveritySession<'_> {
             ProjectId::Sashiko => "Verified Sashiko Defect:",
             ProjectId::Gcc => "Verified GCC Defect:",
             ProjectId::Qemu => "Verified QEMU Defect:",
+            ProjectId::E2fsprogs => "Verified e2fsprogs Defect:",
         };
         let verification_block = if self.verification_reasoning.trim().is_empty() {
             String::new()
@@ -1600,6 +1709,11 @@ fn report_prompt_parts(project: ProjectId) -> ReportPromptParts {
             audience: "Do not explain generic QEMU mechanics such as the QOM property system, MemoryRegions, bottom halves or iothreads. When the guest can trigger the bug, say how. Established terms: out-of-bounds read or write, use-after-free, leak on the unrealize path, assertion failure, abort, incorrect guest-visible behavior.",
             examples: QEMU_REPORT_EXAMPLES,
         },
+        ProjectId::E2fsprogs => ReportPromptParts {
+            role: "You are an experienced e2fsprogs and ext4 filesystem maintainer writing a standalone report of a verified defect in the e2fsprogs codebase, fit for linux-ext4@vger.kernel.org.",
+            audience: "Do not explain basic ext2, ext3 or ext4 mechanics such as inodes, block bitmaps, extent trees, superblocks or journals. When a crafted filesystem image can trigger the bug, say how. Established terms: silent metadata corruption, user data corruption, out-of-bounds read or write, 32-bit block number truncation, endianness mismatch, missing checksum update, leak.",
+            examples: E2FSPROGS_REPORT_EXAMPLES,
+        },
     }
 }
 
@@ -1685,6 +1799,19 @@ offset 0x3c returns host heap memory.
 foo_realize() allocates s->fifo, but foo_unrealize() never frees it, so
 every device_del of the device leaks the FIFO."#;
 
+#[cfg(feature = "server")]
+const E2FSPROGS_REPORT_EXAMPLES: &str = r#"## A 64-bit truncation bug, prose only
+
+On 64-bit filesystems above 2^32 blocks, ext2fs_foo_scan() stores the
+starting block from ext2fs_blocks_count() in a 32-bit blk_t local,
+truncating the high bits and scanning the wrong block group range.
+
+## A leak on an error path, prose only
+
+rewrite_foo_extents() opens an extent handle with ext2fs_extent_open2()
+and returns early when ext2fs_extent_get() fails without calling
+ext2fs_extent_free(), leaking the handle and its level buffer."#;
+
 /// Builds the report stage's system prompt for `project` from the shared
 /// writing rules and the project's own parts.
 #[cfg(feature = "server")]
@@ -1748,6 +1875,7 @@ impl LlmSession for ReportSession<'_> {
             ProjectId::Sashiko => "Sashiko Defect Details:",
             ProjectId::Gcc => "GCC Defect Details:",
             ProjectId::Qemu => "QEMU Defect Details:",
+            ProjectId::E2fsprogs => "e2fsprogs Defect Details:",
         };
 
         format!(
@@ -1839,6 +1967,11 @@ pub fn infer_project_from_bug_or_tool(
         || tool.is_some_and(|t| t.starts_with("sashiko:qemu"))
     {
         ProjectId::Qemu
+    } else if default_project == ProjectId::E2fsprogs
+        || bugid.is_some_and(|id| id.starts_with("e2fsprogs-"))
+        || tool.is_some_and(|t| t.starts_with("sashiko:e2fsprogs"))
+    {
+        ProjectId::E2fsprogs
     } else if bugid.is_some_and(|id| id.starts_with("linux-"))
         || tool.is_some_and(|t| t.starts_with("sashiko:linux"))
     {
@@ -1886,6 +2019,7 @@ fn build_candidate_bug_and_enrichment(
         ProjectId::Sashiko => "sashiko:sashiko_patch_review",
         ProjectId::Gcc => "sashiko:gcc_patch_review",
         ProjectId::Qemu => "sashiko:qemu_patch_review",
+        ProjectId::E2fsprogs => "sashiko:e2fsprogs_patch_review",
     };
     let effective_db = if db.has_bug_actor() && db.bug_model().is_some() {
         db.with_bug_actor(
@@ -2716,6 +2850,7 @@ pub async fn run_standalone_bug_pipeline_for_project(
         ProjectId::Sashiko => "Sashiko",
         ProjectId::Gcc => "GCC",
         ProjectId::Qemu => "QEMU",
+        ProjectId::E2fsprogs => "e2fsprogs",
     };
     info!(
         "Processing standalone candidate {} issue: '{}' in subsystems '{:?}'",
@@ -3209,6 +3344,7 @@ pub async fn process_issue_worker_for_project(
         ProjectId::Sashiko => "Sashiko",
         ProjectId::Gcc => "GCC",
         ProjectId::Qemu => "QEMU",
+        ProjectId::E2fsprogs => "e2fsprogs",
     };
     info!(
         "Processing candidate {} issue: '{}' in subsystems '{:?}'",
@@ -3230,6 +3366,7 @@ pub async fn process_issue_worker_for_project(
             ProjectId::Sashiko => "sashiko:sashiko_bug".to_string(),
             ProjectId::Gcc => "sashiko:gcc_bug".to_string(),
             ProjectId::Qemu => "sashiko:qemu_bug".to_string(),
+            ProjectId::E2fsprogs => "sashiko:e2fsprogs_bug".to_string(),
         }
     };
     let is_scan_candidate = tool == "sashiko:linux_scan"
@@ -3770,9 +3907,9 @@ async fn run_git_query_capped(
 /// Resolves the current HEAD commit SHA of the upstream mainline tree in `repo_path`.
 ///
 /// Prefers a remote whose URL matches `torvalds/linux`, `gcc.gnu.org/git/gcc`,
-/// `gnutools/gcc`, `qemu-project/qemu`, or `qemu/qemu` (`{name}/master`) or
-/// `sashiko-dev/sashiko` (`{name}/main`), falling back to `origin/master`,
-/// `origin/main`, `master`, `main`, and `HEAD`.
+/// `gnutools/gcc`, `qemu-project/qemu`, `qemu/qemu`, or `e2fsprogs`
+/// (`{name}/master`) or `sashiko-dev/sashiko` (`{name}/main`), falling back to
+/// `origin/master`, `origin/main`, `master`, `main`, and `HEAD`.
 pub async fn resolve_linus_sha(repo_path: &std::path::Path) -> Option<String> {
     let mut candidate_refs = Vec::new();
     match run_git_query(repo_path, &["remote", "-v"]).await {
@@ -3787,6 +3924,7 @@ pub async fn resolve_linus_sha(repo_path: &std::path::Path) -> Option<String> {
                         || url.contains("qemu-project/qemu")
                         || url.contains("qemu.org")
                         || url.contains("qemu/qemu")
+                        || url.contains("e2fsprogs")
                     {
                         let r = format!("{}/master", name);
                         if !candidate_refs.contains(&r) {
@@ -4370,6 +4508,13 @@ impl LlmSession for VerifyUpstreamFixSession<'_> {
                 Output raw JSON only."
                     .to_string()
             }
+            ProjectId::E2fsprogs => {
+                "You are an expert e2fsprogs and ext4 maintainer auditing whether a previously verified e2fsprogs bug has been fixed on the upstream e2fsprogs master branch.\n\
+                Do NOT give commits the benefit of the doubt: only mark a bug as \"fixed\" if you can point to a specific upstream commit that genuinely resolves the root cause of the defect or removes the vulnerable code path.\n\
+                If commits in the range only refactor, move lines, rename symbols, or modify unrelated functions while the defect remains triggerable, you MUST report \"still_present\".\n\
+                Output raw JSON only."
+                    .to_string()
+            }
         }
     }
 
@@ -4431,6 +4576,11 @@ impl LlmSession for VerifyUpstreamFixSession<'_> {
                 "Current Upstream Master SHA",
                 "Open QEMU Bug",
                 "the upstream QEMU master branch",
+            ),
+            ProjectId::E2fsprogs => (
+                "Current Upstream Master SHA",
+                "Open e2fsprogs Bug",
+                "the upstream e2fsprogs master branch",
             ),
         };
 
@@ -4697,6 +4847,7 @@ pub async fn check_bug_fixed_upstream_with_candidates(
         ProjectId::Sashiko => "sashiko:sashiko_bug:fix_check",
         ProjectId::Gcc => "sashiko:gcc_bug:fix_check",
         ProjectId::Qemu => "sashiko:qemu_bug:fix_check",
+        ProjectId::E2fsprogs => "sashiko:e2fsprogs_bug:fix_check",
     };
 
     if candidates.is_empty() {
@@ -4876,10 +5027,22 @@ mod tests {
                 infer_project_from_bug_or_tool(bugid, Some("sashiko:qemu_bug"), ProjectId::Linux),
                 ProjectId::Qemu
             );
+            assert_eq!(
+                infer_project_from_bug_or_tool(
+                    bugid,
+                    Some("sashiko:e2fsprogs_bug"),
+                    ProjectId::Linux
+                ),
+                ProjectId::E2fsprogs
+            );
         }
         assert_eq!(
             infer_project_from_bug_or_tool(Some("qemu-1"), None, ProjectId::Linux),
             ProjectId::Qemu
+        );
+        assert_eq!(
+            infer_project_from_bug_or_tool(Some("e2fsprogs-1"), None, ProjectId::Linux),
+            ProjectId::E2fsprogs
         );
         assert_eq!(
             infer_project_from_bug_or_tool(
@@ -4901,6 +5064,20 @@ mod tests {
         assert_eq!(
             infer_project_from_bug_or_tool(Some("other"), Some("web"), ProjectId::Qemu),
             ProjectId::Qemu
+        );
+        assert_eq!(
+            infer_project_from_bug_or_tool(None, None, ProjectId::E2fsprogs),
+            ProjectId::E2fsprogs
+        );
+        assert_eq!(
+            extract_directory_subsystems_for_project(
+                &[
+                    "lib/ext2fs/extents.c".to_string(),
+                    "e2fsck/pass1.c".to_string(),
+                ],
+                ProjectId::E2fsprogs,
+            ),
+            vec!["lib/ext2fs".to_string(), "e2fsck".to_string()]
         );
         assert_eq!(
             infer_project_from_bug_or_tool(None, None, ProjectId::Linux),
@@ -5714,6 +5891,7 @@ mod tests {
             ProjectId::Sashiko,
             ProjectId::Gcc,
             ProjectId::Qemu,
+            ProjectId::E2fsprogs,
         ] {
             let parts = report_prompt_parts(project);
             for line in parts.examples.lines() {
@@ -7639,7 +7817,12 @@ F:	drivers/net/ethernet/intel/e1000/
                 .contains("git_read_files")
         );
 
-        for other in [ProjectId::Sashiko, ProjectId::Gcc, ProjectId::Qemu] {
+        for other in [
+            ProjectId::Sashiko,
+            ProjectId::Gcc,
+            ProjectId::Qemu,
+            ProjectId::E2fsprogs,
+        ] {
             let non_linux = SeveritySession {
                 project: other,
                 kernel_threat_model: Some(&model),

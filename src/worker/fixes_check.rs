@@ -1211,7 +1211,7 @@ pub async fn analyze_fixes_for_commit(
 ) -> FixesAnalysis {
     if !matches!(
         project,
-        ProjectId::Linux | ProjectId::Sashiko | ProjectId::Qemu
+        ProjectId::Linux | ProjectId::Sashiko | ProjectId::Qemu | ProjectId::E2fsprogs
     ) {
         return FixesAnalysis::default();
     }
